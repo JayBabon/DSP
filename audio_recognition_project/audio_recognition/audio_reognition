@@ -1,0 +1,71 @@
+import numpy as np
+from sklearn import svm
+import os
+import librosa
+import pathlib
+import soundfile as sf
+
+def extract():
+    x = True
+    #path to directory of the csv files
+    directory = "CSV"
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            if entry.is_file():
+                filepath = entry.path
+                features = np.loadtxt(filepath,
+                                 delimiter=",", dtype=float)
+
+                filename = filepath.split('/')
+                student = filename[1].split('.')[0]
+                if x:
+                    all_features = features
+                    all_class = np.full((100, 1), student)
+                    x = False
+                else:
+                    for i in features:
+                        all_features = np.append(all_features, [i], axis=0)
+                        all_class = np.append(all_class, student)
+    return all_features, all_class
+
+
+if _name_ == '_main_':
+    train_features, train_class = extract()
+    audio_classifier = svm.LinearSVC()
+    audio_classifier.fit(train_features, train_class)
+
+
+    #Cropping Activity
+
+    #path to the fresh sample file
+    path_to_audio = "freshECE_3.wav"
+    audio, sample_rate = librosa.load(path_to_audio, sr=44100)
+    first_positive_index = np.where(audio > 0.12)[0]
+    # Check if there's a positive sample
+    if first_positive_index.size > 0:
+        # Crop the audio from the first positive sample to 44100 samples
+        start_index = first_positive_index[0]
+        cropped_audio = audio[start_index:start_index + 44100]
+        # Ensure we don't exceed the array length
+        if len(cropped_audio) < 44100:
+            print("Not enough samples to crop to 44100.")
+        else:
+            # Write the cropped audio to a new file
+            sf.write(path_to_audio, cropped_audio, sample_rate, subtype='PCM_24')
+    else:
+        print("No positive samples found in the audio.")
+
+
+    #CSV Activity
+    total_coeffs = 1300
+    n_mfcc = 13
+    y, sr = librosa.load(path_to_audio, sr=None)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+    mfcc_flat = mfcc.T.flatten()[:total_coeffs]
+    if len(mfcc_flat) < total_coeffs:
+        mfcc_flat = np.pad(mfcc_flat, (0, total_coeffs - len(mfcc_flat)), mode='constant')
+
+
+
+    student_name = audio_classifier.predict([mfcc_flat])
+    print(student_name)
